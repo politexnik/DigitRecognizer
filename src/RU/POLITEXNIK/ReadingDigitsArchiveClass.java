@@ -9,10 +9,10 @@ public class ReadingDigitsArchiveClass {
 
     public static void main(String[] args) throws IOException {
         // write your code here
-        FileInputStream fileInputStreamDigits = new FileInputStream("FileArhives\\train-images.idx3-ubyte");
+        FileInputStream fileInputStreamDigits = new FileInputStream("FileArhives\\t10k-images.idx3-ubyte");
         DataInputStream dataInputStreamDigits = new DataInputStream(fileInputStreamDigits);
 
-        FileInputStream fileInputStreamLabels = new FileInputStream("FileArhives\\train-labels.idx1-ubyte");
+        FileInputStream fileInputStreamLabels = new FileInputStream("FileArhives\\t10k-labels.idx1-ubyte");
         DataInputStream dataInputStreamLabels = new DataInputStream(fileInputStreamLabels);
         //читаем magic number Digits
         try(dataInputStreamDigits; dataInputStreamLabels) {

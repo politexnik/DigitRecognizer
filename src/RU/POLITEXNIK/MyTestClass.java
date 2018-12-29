@@ -25,20 +25,23 @@ public class MyTestClass {
 
         /*rowsInImage = */dataInputStreamDigits.readInt();  //размер изображения по вертикали
 
-        /*columnsInImage = */dataInputStreamLabels.readInt();   //размер изображения по горизонтали
+        /*columnsInImage = */dataInputStreamDigits.readInt();   //размер изображения по горизонтали
 
         byte[][] digitTrainingArr = new byte[1000] [28*28];
         byte[] labelsTrainingArr = new byte[1000];
 
         for (int i = 0; i < 1000; i++) { //заполняем массивы images и labels
             labelsTrainingArr[i] = dataInputStreamLabels.readByte();
-            digitTrainingArr[i] = dataInputStreamDigits.readNBytes(28*28);
+            dataInputStreamDigits.read(digitTrainingArr[i]);
+            for (int j = 0; j < 28*28; j++) {
+                digitTrainingArr[i][j] = (byte)(dataInputStreamDigits.readByte() & 0xff);
+            }
         }
 
-        System.out.println(labelsTrainingArr[0] + " vs " + digitRecognizer.recognize(digitTrainingArr[0]));
-        System.out.println(labelsTrainingArr[1] + " vs " + digitRecognizer.recognize(digitTrainingArr[1]));
-        System.out.println(labelsTrainingArr[2] + " vs " + digitRecognizer.recognize(digitTrainingArr[2]));
-        System.out.println(labelsTrainingArr[3] + " vs " + digitRecognizer.recognize(digitTrainingArr[3]));
+        for (int i = 0; i < 100; i++) {
+            System.out.println(labelsTrainingArr[i] + " vs " + digitRecognizer.recognize(digitTrainingArr[i]));
+        }
+
 
 
 

@@ -47,7 +47,10 @@ public class DigitRecognizer {
 
         for (int i = 0; i < itemsTrainingNumber; i++) { //заполняем массивы images и labels
             labelsTrainingArr[i] = dataInputStreamLabels.readByte();
-            digitTrainingArr[i] = dataInputStreamDigits.readNBytes(rowsInImage * columnsInImage);
+            //dataInputStreamDigits.read(digitTrainingArr[i]);
+            for (int j = 0; j < rowsInImage * columnsInImage; j++) {
+                digitTrainingArr[i][j] = (byte)(dataInputStreamDigits.readByte() & 0xff);
+            }
         }
         closestTypesCount = 30;
     }
@@ -58,20 +61,31 @@ public class DigitRecognizer {
         double currentDistance = 0;
         for (int i = 0; i < itemsTrainingNumber; i++) {
             for (int j = 0; j < rowsInImage * columnsInImage; j++) {
-                currentDistance += imageArr[j] * imageArr[j] - digitTrainingArr[i][j] * digitTrainingArr[i][j];
+                currentDistance += (imageArr[j] - digitTrainingArr[i][j]) * (imageArr[j] - digitTrainingArr[i][j]);
             }
             distanceArr[i] = Math.sqrt(currentDistance);
+            currentDistance = 0;
         }
 
         ArrayForSort arrayForSort = new ArrayForSort(labelsTrainingArr, distanceArr);
         arrayForSort.sort();
 
         byte[] closestDigits = Arrays.copyOf(arrayForSort.labels, closestTypesCount);
-        Map<Byte, Byte> freqMap = new TreeMap<>();
+        Map<Byte, Integer> freqMap = new TreeMap<>();
         for (byte b: closestDigits) {
-            freqMap.put(b, (byte)(freqMap.getOrDefault(b, (byte)0) + 1));
+            freqMap.put(b, (freqMap.getOrDefault(b, 0) + 1));
         }
-        return ((TreeMap<Byte, Byte>) freqMap).firstKey();
+
+        //выводим нужный самый частый клас из соседей
+        int max = 0;
+        byte digit = 0;
+        for (Map.Entry<Byte, Integer> entry : freqMap.entrySet()) {
+            if (entry.getValue() > max) {
+                max = entry.getValue();
+                digit = entry.getKey();
+            }
+        }
+        return digit;
     }
 
     private static class ArrayForSort{
