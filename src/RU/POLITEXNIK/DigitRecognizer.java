@@ -1,15 +1,12 @@
 package RU.POLITEXNIK;
 
-import java.io.DataInputStream;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
 public class DigitRecognizer {
-    private byte[][] digitTrainingArr;
+    private int[][] digitTrainingArr;
     private byte[] labelsTrainingArr;
     private int itemsTrainingNumber;
     private int rowsInImage;
@@ -23,11 +20,9 @@ public class DigitRecognizer {
 
     public DigitRecognizer(Path labelsIdx3, Path imagesIdx3) throws IOException {
         //images
-        FileInputStream fileInputStreamDigits = new FileInputStream(imagesIdx3.toString());
-        DataInputStream dataInputStreamDigits = new DataInputStream(fileInputStreamDigits);
+        DataInputStream dataInputStreamDigits = new DataInputStream(new BufferedInputStream(new FileInputStream(imagesIdx3.toString()),784000));
         //labels
-        FileInputStream fileInputStreamLabels = new FileInputStream(labelsIdx3.toString());
-        DataInputStream dataInputStreamLabels = new DataInputStream(fileInputStreamLabels);
+        DataInputStream dataInputStreamLabels = new DataInputStream(new BufferedInputStream(new FileInputStream(labelsIdx3.toString()), 784000));
 
         dataInputStreamDigits.readInt();    //читает magic number Idx3 файлов
         dataInputStreamLabels.readInt();
@@ -42,20 +37,23 @@ public class DigitRecognizer {
         columnsInImage = dataInputStreamDigits.readInt();   //размер изображения по горизонтали
         System.out.println("columnsInImage = " + columnsInImage);
 
-        digitTrainingArr = new byte[itemsTrainingNumber] [rowsInImage * columnsInImage];
+        digitTrainingArr = new int[itemsTrainingNumber] [rowsInImage * columnsInImage];
         labelsTrainingArr = new byte[itemsTrainingNumber];
 
         for (int i = 0; i < itemsTrainingNumber; i++) { //заполняем массивы images и labels
             labelsTrainingArr[i] = dataInputStreamLabels.readByte();
             //dataInputStreamDigits.read(digitTrainingArr[i]);
             for (int j = 0; j < rowsInImage * columnsInImage; j++) {
-                digitTrainingArr[i][j] = (byte)(dataInputStreamDigits.readByte() & 0xff);
+                digitTrainingArr[i][j] = (dataInputStreamDigits.readByte() & 0xff);
             }
         }
         closestTypesCount = 30;
+        dataInputStreamDigits.close();
+        dataInputStreamLabels.close();
+
     }
 
-    public byte recognize(byte[] imageArr) {
+    public byte recognize(int[] imageArr) {
         //Создаем массив дистанций, вычисляем по каждому элементу digitTrainingArr, заполняем
         double[] distanceArr = new double[itemsTrainingNumber];
         double currentDistance = 0;
