@@ -2,15 +2,14 @@ package RU.POLITEXNIK;
 
 import java.io.*;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DigitRecognizer {
-    private int[][] digitTrainingArr;
+    private byte[][] digitTrainingArr;
     private byte[] labelsTrainingArr;
     private int itemsTrainingNumber;
-    private int rowsInImage;
-    private int columnsInImage;
+    private int sizeForDigit;
 
     public void setClosestTypesCount(int closestTypesCount) {
         this.closestTypesCount = closestTypesCount;
@@ -18,72 +17,117 @@ public class DigitRecognizer {
 
     private int closestTypesCount;
 
-    public DigitRecognizer(Path labelsIdx3, Path imagesIdx3) throws IOException {
-        //images
-        DataInputStream dataInputStreamDigits = new DataInputStream(new BufferedInputStream(new FileInputStream(imagesIdx3.toString()),784000));
-        //labels
-        DataInputStream dataInputStreamLabels = new DataInputStream(new BufferedInputStream(new FileInputStream(labelsIdx3.toString()), 784000));
-
-        dataInputStreamDigits.readInt();    //читает magic number Idx3 файлов
-        dataInputStreamLabels.readInt();
-
-        itemsTrainingNumber = dataInputStreamDigits.readInt();  //количество изображений в наборе
-        System.out.println("itemsTrainingNumber = " + itemsTrainingNumber);
-        System.out.println(dataInputStreamLabels.readInt());
-
-        rowsInImage = dataInputStreamDigits.readInt();  //размер изображения по вертикали
-        System.out.println("rowsInImage = " + rowsInImage);
-
-        columnsInImage = dataInputStreamDigits.readInt();   //размер изображения по горизонтали
-        System.out.println("columnsInImage = " + columnsInImage);
-
-        digitTrainingArr = new int[itemsTrainingNumber] [rowsInImage * columnsInImage];
-        labelsTrainingArr = new byte[itemsTrainingNumber];
-
-        for (int i = 0; i < itemsTrainingNumber; i++) { //заполняем массивы images и labels
-            labelsTrainingArr[i] = dataInputStreamLabels.readByte();
-            //dataInputStreamDigits.read(digitTrainingArr[i]);
-            for (int j = 0; j < rowsInImage * columnsInImage; j++) {
-                digitTrainingArr[i][j] = (dataInputStreamDigits.readByte() & 0xff);
-            }
+    public DigitRecognizer(Path labelsIdx3, Path imagesIdx3) throws IOException, Exception {
+        digitTrainingArr = readIdxPathWithDigits(imagesIdx3);
+        labelsTrainingArr = readIdxPathWithLabels(labelsIdx3);
+        if (digitTrainingArr.length != labelsTrainingArr.length) {
+            throw new Exception("количество значений в массивах с данными цифр и меток не равны!");
         }
-        closestTypesCount = 30;
-        dataInputStreamDigits.close();
-        dataInputStreamLabels.close();
-
+        itemsTrainingNumber = labelsTrainingArr.length;
+        sizeForDigit = digitTrainingArr[0].length;
+        closestTypesCount = 10;
     }
 
-    public byte recognize(int[] imageArr) {
+    public byte recognize(byte[] imageArr, Metrics metric) {
         //Создаем массив дистанций, вычисляем по каждому элементу digitTrainingArr, заполняем
         double[] distanceArr = new double[itemsTrainingNumber];
         double currentDistance = 0;
         for (int i = 0; i < itemsTrainingNumber; i++) {
-            for (int j = 0; j < rowsInImage * columnsInImage; j++) {
-                currentDistance += (imageArr[j] - digitTrainingArr[i][j]) * (imageArr[j] - digitTrainingArr[i][j]);
+            if (metric == Metrics.EVKLIDE) {
+                for (int j = 0; j < sizeForDigit; j++) {
+                    int delta = (imageArr[j] - digitTrainingArr[i][j]);
+                        currentDistance += delta * delta;
+                }
+                distanceArr[i] = Math.sqrt(currentDistance);
+            } else {
+                for (int j = 0; j < sizeForDigit; j++) {
+                    int delta = (imageArr[j] - digitTrainingArr[i][j]);
+                    currentDistance += (delta >= 0) ? delta : -delta;
+                }
+                distanceArr[i] = currentDistance;
             }
-            distanceArr[i] = Math.sqrt(currentDistance);
             currentDistance = 0;
         }
 
         ArrayForSort arrayForSort = new ArrayForSort(labelsTrainingArr, distanceArr);
         arrayForSort.sort();
 
-        byte[] closestDigits = Arrays.copyOf(arrayForSort.labels, closestTypesCount);
-        Map<Byte, Integer> freqMap = new TreeMap<>();
-        for (byte b: closestDigits) {
-            freqMap.put(b, (freqMap.getOrDefault(b, 0) + 1));
+        return findClassFromNeighbours(arrayForSort);
+    }
+
+    // Возвращает значение несовпадения в долях от тестировочного массива
+    public  double recognize(Path labelsIdx3, Path imagesIdx3, Metrics metric) throws IOException, Exception {
+        //читаем файлы, заполняем отдельные массивы
+        byte[] labelsTestArr = readIdxPathWithLabels(labelsIdx3);
+        byte[][] digitTestArr = readIdxPathWithDigits(imagesIdx3);
+
+        if (labelsTestArr.length != digitTestArr.length) {
+            throw new Exception("Размеры массивов данных labels и digits не совпадают!");
+        }
+        //int count = 0;
+        AtomicInteger count = new AtomicInteger(0);
+        AtomicInteger percent = new AtomicInteger(0);
+        System.out.print("Завершено " + percent.get() + "%");
+        Thread[] threads = new Thread[2];   //обработку запускаем в 2 потока
+        for (AtomicInteger atI = new AtomicInteger(0); atI.get() < threads.length; atI.incrementAndGet()) {
+            int k = atI.get();
+            Thread t = new Thread( () -> {
+                for (int i = k * (labelsTestArr.length / threads.length); i < (k + 1) * (labelsTestArr.length / threads.length); i++) {
+                    if (i > 0 && i % (labelsTestArr.length / 100) == 0) {
+                        System.out.print("\rЗавершено " + percent.incrementAndGet() + "%");
+                    }
+                    byte label = labelsTestArr[i];
+                    byte labelRecognized = recognize(digitTestArr[i], metric);
+                    if (label != labelRecognized) {
+                        count.incrementAndGet();
+                    }
+                }
+            });
+            threads[atI.get()] = t;
+            t.start();
+        }
+        for (Thread t: threads) {
+            t.join();
         }
 
-        //выводим нужный самый частый клас из соседей
-        int max = 0;
-        byte digit = 0;
-        for (Map.Entry<Byte, Integer> entry : freqMap.entrySet()) {
-            if (entry.getValue() > max) {
-                max = entry.getValue();
-                digit = entry.getKey();
+        System.out.println();
+        return count.get() * 1.0 / labelsTestArr.length;
+    }
+
+    private byte[][] readIdxPathWithDigits(Path imagesIdx3) throws IOException {
+        //images
+        DataInputStream dataInputStreamDigits = new DataInputStream(new BufferedInputStream(
+                new FileInputStream(imagesIdx3.toString()), 1024*10));
+        dataInputStreamDigits.readInt();    //читает magic number Idx3 файла с цифрами
+        int itemsNumber = dataInputStreamDigits.readInt();  //количество изображений в наборе
+        int rowsInImage = dataInputStreamDigits.readInt();  //размер изображения по вертикали
+        int columnsInImage = dataInputStreamDigits.readInt();   //размер изображения по горизонтали
+
+        byte[][] digitArr = new byte[itemsNumber] [rowsInImage * columnsInImage]; //возвращаемый массив
+        //заполняем массив
+        for (int i = 0; i < itemsNumber; i++) { //заполняем массивы images и labels
+            for (int j = 0; j < rowsInImage * columnsInImage; j++) {
+                digitArr[i][j] = (byte)(dataInputStreamDigits.readByte() & 0xff - 128);
             }
         }
-        return digit;
+        dataInputStreamDigits.close();
+        return digitArr;
+    }
+
+    //читает файл с labels
+    private byte[]  readIdxPathWithLabels(Path labelsIdx) throws IOException {
+        //labels
+        DataInputStream dataInputStreamLabels = new DataInputStream(new BufferedInputStream(
+                new FileInputStream(labelsIdx.toString()), 1024 * 10));
+
+        dataInputStreamLabels.readInt();            //читает magic number Idx3 файлов
+        int countLabels = dataInputStreamLabels.readInt();  //количество изображений в наборе
+        byte[] labelsArr = new byte[countLabels];   //возвращаемый массив
+        for (int i = 0; i < countLabels; i++) { //заполняем массив labels
+            labelsArr[i] = dataInputStreamLabels.readByte();
+        }
+        dataInputStreamLabels.close();
+        return labelsArr;
     }
 
     private static class ArrayForSort{
@@ -132,13 +176,30 @@ public class DigitRecognizer {
             // вызов рекурсии для сортировки левой и правой части
             if (low < j)
                 sort(low, j);
-
             if (high > i)
                 sort(i, high);
         }
-
     }
 
+    //поиск по к-ближайшему соседу с учетом расстояния до соседа (веса)
+    private byte findClassFromNeighbours(ArrayForSort arrayForSort) {
+        byte[] closestDigits = Arrays.copyOf(arrayForSort.labels, closestTypesCount);
+        double[] closestDistance = Arrays.copyOf(arrayForSort.distanceArr, closestTypesCount);
+        Map<Byte, Double> freqMap = new TreeMap<>();
+        for (int i = 0; i < closestDigits.length; i++) {
+            freqMap.put(closestDigits[i], (freqMap.getOrDefault(closestDigits[i], 0.0)
+                    + 1.0 / closestDistance[i] ));
+        }
 
-
+        //выводим нужный самый частый клас из соседей
+        double max = 0;
+        byte digit = 0;
+        for (Map.Entry<Byte, Double> entry : freqMap.entrySet()) {
+            if (entry.getValue() > max) {
+                max = entry.getValue();
+                digit = entry.getKey();
+            }
+        }
+        return digit;
+    }
 }
