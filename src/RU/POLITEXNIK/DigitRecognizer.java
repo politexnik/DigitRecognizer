@@ -1,5 +1,8 @@
 package RU.POLITEXNIK;
 
+import RU.POLITEXNIK.Metric.EvklideMetric;
+import RU.POLITEXNIK.Metric.MetricsInterface;
+
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
@@ -55,6 +58,20 @@ public class DigitRecognizer {
         return findClassFromNeighbours(arrayForSort);
     }
 
+    public byte recognizeWithMethods(byte[] imageArr, MetricsInterface metric) {
+        //Создаем массив дистанций, вычисляем по каждому элементу digitTrainingArr, заполняем
+        double[] distanceArr = new double[itemsTrainingNumber];
+        double currentDistance = 0;
+        for (int i = 0; i < itemsTrainingNumber; i++) {
+            distanceArr[i] = metric.getDistance(imageArr, digitTrainingArr, i);
+        }
+
+        ArrayForSort arrayForSort = new ArrayForSort(labelsTrainingArr, distanceArr);
+        arrayForSort.sort();
+
+        return findClassFromNeighbours(arrayForSort);
+    }
+
     // Возвращает значение несовпадения в долях от тестировочного массива
     public  double recognize(Path labelsIdx3, Path imagesIdx3, Metrics metric) throws IOException, Exception {
         //читаем файлы, заполняем отдельные массивы
@@ -68,7 +85,7 @@ public class DigitRecognizer {
         AtomicInteger count = new AtomicInteger(0);
         AtomicInteger percent = new AtomicInteger(0);
         System.out.print("Завершено " + percent.get() + "%");
-        Thread[] threads = new Thread[2];   //обработку запускаем в 2 потока
+        Thread[] threads = new Thread[4];   //обработку запускаем в 4 потока
         for (AtomicInteger atI = new AtomicInteger(0); atI.get() < threads.length; atI.incrementAndGet()) {
             int k = atI.get();
             Thread t = new Thread( () -> {
@@ -92,6 +109,38 @@ public class DigitRecognizer {
 
         System.out.println();
         return count.get() * 1.0 / labelsTestArr.length;
+    }
+
+    public void recognizeOneImage(Path labelsIdx3, Path imagesIdx3, Metrics metric) throws IOException, Exception {
+        //читаем файлы, заполняем отдельные массивы
+        byte[] labelsTestArr = readIdxPathWithLabels(labelsIdx3);
+        byte[][] digitTestArr = readIdxPathWithDigits(imagesIdx3);
+
+        if (labelsTestArr.length != digitTestArr.length) {
+            throw new Exception("Размеры массивов данных labels и digits не совпадают!");
+        }
+        //int count = 0;
+        AtomicInteger count = new AtomicInteger(0);
+        AtomicInteger percent = new AtomicInteger(0);
+        System.out.print("Завершено " + percent.get() + "%");
+
+        recognize(digitTestArr[5], metric);
+    }
+
+    public void recognizeOneImageWithMethods(Path labelsIdx3, Path imagesIdx3, MetricsInterface metric) throws IOException, Exception {
+        //читаем файлы, заполняем отдельные массивы
+        byte[] labelsTestArr = readIdxPathWithLabels(labelsIdx3);
+        byte[][] digitTestArr = readIdxPathWithDigits(imagesIdx3);
+
+        if (labelsTestArr.length != digitTestArr.length) {
+            throw new Exception("Размеры массивов данных labels и digits не совпадают!");
+        }
+        //int count = 0;
+        AtomicInteger count = new AtomicInteger(0);
+        AtomicInteger percent = new AtomicInteger(0);
+        System.out.print("Завершено " + percent.get() + "%");
+
+        recognizeWithMethods(digitTestArr[5], metric);
     }
 
     private byte[][] readIdxPathWithDigits(Path imagesIdx3) throws IOException {
